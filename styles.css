@@ -65,7 +65,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .icon-button:disabled { opacity: .4; cursor: not-allowed; }
 .calendar-status { min-height: 20px; margin: 0 0 8px; color: var(--muted); font-size: .82rem; line-height: 1.4; }
 .calendar-status.error { color: #a63d3d; }
-.calendar-status.success { color: var(--green); }
+.calendar-status.success { color: #237a59; }
 .weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .weekdays { margin-bottom: 4px; color: #86908b; font-size: .72rem; font-weight: 750; text-align: center; }
 .weekday { padding: 4px 0; }
