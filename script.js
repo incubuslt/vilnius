@@ -1,22 +1,27 @@
 "use strict";
 
-// Both feeds belong to this apartment; dates booked on either feed are unavailable.
-const property = {
-  name: "Smolensko 35"
-};
+const properties = new Map([
+  ["smolensko-35", { name: "Smolensko 35" }],
+  ["kavoliuko-14", { name: "Kavoliuko 14" }]
+]);
 const calendarApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/calendar";
 const bookingApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/booking";
 
 const state = {
+  propertyId: "smolensko-35",
   unavailableDates: null,
   calendarLoading: true,
   calendarError: "",
+  calendarRequestId: 0,
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   checkin: "",
   checkout: ""
 };
 
 const elements = {
+  propertyTabs: [...document.querySelectorAll("[data-property-id]")],
+  bookingPanel: document.getElementById("booking-panel"),
+  calendarHeading: document.getElementById("calendar-heading"),
   calendarDays: document.getElementById("calendar-days"),
   calendarStatus: document.getElementById("calendar-status"),
   monthTitle: document.getElementById("month-title"),
@@ -69,24 +74,33 @@ function getBookingWindow() {
 }
 
 async function loadCalendar() {
+  const requestId = ++state.calendarRequestId;
+  const propertyId = state.propertyId;
   state.calendarLoading = true;
   state.calendarError = "";
   renderCalendar();
   try {
-    const response = await fetch(calendarApiUrl, { headers: { Accept: "application/json" } });
+    const url = new URL(calendarApiUrl);
+    url.searchParams.set("propertyId", propertyId);
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`Calendar service returned HTTP ${response.status}`);
     const calendar = await response.json();
-    if (!Array.isArray(calendar.unavailableDates) ||
+    if (requestId !== state.calendarRequestId) return;
+    if (calendar.propertyId !== propertyId ||
+        !Array.isArray(calendar.unavailableDates) ||
         !calendar.unavailableDates.every((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))) {
       throw new Error("Calendar service returned invalid availability data");
     }
     state.unavailableDates = new Set(calendar.unavailableDates);
   } catch (error) {
-    console.error(`Unable to load all availability calendars for ${property.name}:`, error);
+    if (requestId !== state.calendarRequestId) return;
+    console.error(`Unable to load all availability calendars for ${properties.get(propertyId).name}:`, error);
     state.calendarError = "Availability could not be loaded. Please try again later.";
   } finally {
-    state.calendarLoading = false;
-    renderCalendar();
+    if (requestId === state.calendarRequestId) {
+      state.calendarLoading = false;
+      renderCalendar();
+    }
   }
 }
 
@@ -221,6 +235,30 @@ function changeMonth(offset) {
   renderCalendar();
 }
 
+function setActiveProperty(propertyId) {
+  const property = properties.get(propertyId);
+  if (!property || propertyId === state.propertyId) return;
+
+  state.propertyId = propertyId;
+  state.unavailableDates = null;
+  state.calendarError = "";
+  state.checkin = "";
+  state.checkout = "";
+  elements.calendarHeading.textContent = `${property.name} availability`;
+  elements.bookingPanel.setAttribute(
+    "aria-labelledby",
+    elements.propertyTabs.find((tab) => tab.dataset.propertyId === propertyId).id
+  );
+  elements.propertyTabs.forEach((tab) => {
+    const selected = tab.dataset.propertyId === propertyId;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  document.title = `${property.name} | Stay in Vilnius`;
+  elements.feedback.classList.remove("visible");
+  loadCalendar();
+}
+
 function validateGuestCounts() {
   const adults = Number(elements.adultCount.value);
   elements.adultCount.classList.toggle("has-selection", Boolean(elements.adultCount.value));
@@ -251,6 +289,7 @@ function validateGuestCounts() {
 
 async function submitBooking(event) {
   event.preventDefault();
+  const propertyId = state.propertyId;
   const formData = new FormData(elements.form);
   const checkin = String(formData.get("checkin") || "");
   const checkout = String(formData.get("checkout") || "");
@@ -289,6 +328,9 @@ async function submitBooking(event) {
 
   const submitButton = elements.form.querySelector('[type="submit"]');
   submitButton.disabled = true;
+  elements.propertyTabs.forEach((tab) => {
+    tab.disabled = true;
+  });
   showFormMessage("Sending your request securely…");
 
   try {
@@ -297,6 +339,7 @@ async function submitBooking(event) {
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         ...Object.fromEntries(formData.entries()),
+        propertyId,
         guests: adults + children
       })
     });
@@ -313,6 +356,9 @@ async function submitBooking(event) {
     showFormMessage(error.message || "We could not send your request. Please try again later.", true);
   } finally {
     submitButton.disabled = false;
+    elements.propertyTabs.forEach((tab) => {
+      tab.disabled = false;
+    });
   }
 }
 
@@ -326,6 +372,23 @@ function showFormMessage(message, isError = false) {
 elements.previousMonth.addEventListener("click", () => changeMonth(-1));
 elements.nextMonth.addEventListener("click", () => changeMonth(1));
 elements.form.addEventListener("submit", submitBooking);
+elements.propertyTabs.forEach((tab) => {
+  tab.addEventListener("click", () => setActiveProperty(tab.dataset.propertyId));
+  tab.addEventListener("keydown", (event) => {
+    const currentIndex = elements.propertyTabs.indexOf(tab);
+    let nextIndex;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % elements.propertyTabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + elements.propertyTabs.length) % elements.propertyTabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = elements.propertyTabs.length - 1;
+    else return;
+
+    event.preventDefault();
+    const nextTab = elements.propertyTabs[nextIndex];
+    nextTab.focus();
+    setActiveProperty(nextTab.dataset.propertyId);
+  });
+});
 elements.adultCount.addEventListener("change", validateGuestCounts);
 elements.childCount.addEventListener("change", validateGuestCounts);
 elements.message.addEventListener("input", () => {

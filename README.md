@@ -22,8 +22,8 @@ GitHub Pages.
 - Cloudflare Worker: <https://smolensko-calendar-api.vilnius-mmt.workers.dev>
 - The account-wide `workers.dev` subdomain is `vilnius-mmt`; URLs for other Workers in this account use it too.
 - API endpoints: `/api/calendar` and `/api/booking`.
-- The Worker currently supports one property, **Smolensko 35**, using one Booking.com and one Airbnb iCal feed.
-- The UI also shows **Kavoliuko 14** as a disabled “Coming soon” tab. It is not connected to a calendar or booking service yet; selecting it cannot switch properties.
+- The Worker supports **Smolensko 35** and **Kavoliuko 14**, each with its own Booking.com and Airbnb iCal feeds.
+- Selecting a property tab loads only that property's availability and sends booking requests for that property.
 
 GitHub Pages and the Worker are separate deployments. Push frontend/documentation changes
 to `main` for Pages. Worker code changes require a separate Wrangler deployment; ask
@@ -33,6 +33,7 @@ explicitly approved for that change.
 ## Frontend behavior
 
 - The calendar merges unavailable nights from both feeds through `/api/calendar`.
+- The property tabs switch between the Smolensko 35 and Kavoliuko 14 calendars.
 - The page starts at the current month and allows navigation through the current month
   plus the next three full calendar months.
 - Check-in must be before the final day of the booking window; the last day is
@@ -58,11 +59,11 @@ not currently enforce the same three-month booking-window limit.
 
 - Never put calendar feed URLs, Telegram bot credentials, or chat IDs in frontend
   files, documentation, Git history, or chat. Keep them only in Cloudflare Worker
-  Secrets: `BOOKING_ICAL_URL`, `AIRBNB_ICAL_URL`, `TELEGRAM_BOT_TOKEN`, and
-  `TELEGRAM_CHAT_ID`.
-- The iCal URLs in an original public Git commit were exposed. Regenerate the
-  Booking.com and Airbnb feed URLs and replace the Worker Secrets; do not reuse
-  exposed URLs. See [the Worker guide](worker/README.md).
+  Secrets: `BOOKING_ICAL_URL`, `AIRBNB_ICAL_URL`, `KAVOL_BOOK_ICAL_URL`,
+  `KAVOL_AIRBNB_ICAL_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`.
+- The original Smolensko iCal URLs in a public Git commit were exposed. Regenerate
+  those feeds and replace their Worker Secrets; do not reuse the exposed URLs.
+  See [the Worker guide](worker/README.md).
 - The Worker allowlist includes the GitHub Pages origin, `https://mmt.lt`,
   `https://www.mmt.lt`, and local development origins on port 5500.
 - Booking requests are limited to 3 per IP per minute, include a honeypot, and
@@ -94,19 +95,15 @@ node --check worker/src/index.js
 
 There is no configured automated test suite or package manifest at present.
 
-## Future work: add Kavoliuko 14
+## Property API mapping
 
-The disabled tab is only a placeholder. To make it functional:
+The frontend sends the selected stable property ID (`smolensko-35` or
+`kavoliuko-14`) to the Worker. The Worker maps these IDs to fixed secret names;
+it never accepts calendar URLs from the browser. Calendar requests return only
+the selected property's merged availability, and booking requests are rechecked
+against that same property's feeds before a property-labelled Telegram message
+is sent.
 
-1. Assign a stable property ID and add property-specific labels and booking details.
-2. Add separate Booking.com and Airbnb feed secrets in Cloudflare. Never accept
-   arbitrary calendar URLs from the browser.
-3. Change the Worker to map known property IDs to their own fixed calendar secrets.
-   `/api/calendar` must return only the chosen property's merged dates.
-4. Include the property ID in each booking request. The Worker must select the
-   corresponding feeds from its fixed map, recheck availability, and identify the
-   property in the Telegram message.
-5. Test each property's availability and booking path independently. Deploy Worker
-   changes only with approval; publish frontend changes by pushing to `main`.
-
-Do not enable the second tab until both frontend and Worker support it end to end.
+When adding another apartment, extend the frontend and this fixed Worker mapping
+together. Add its calendar URLs as Cloudflare Secrets and test the availability
+and booking paths before enabling its tab.

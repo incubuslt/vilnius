@@ -1,3 +1,16 @@
+const PROPERTIES = Object.freeze({
+  "smolensko-35": Object.freeze({
+    name: "Smolensko 35",
+    bookingSecret: "BOOKING_ICAL_URL",
+    airbnbSecret: "AIRBNB_ICAL_URL"
+  }),
+  "kavoliuko-14": Object.freeze({
+    name: "Kavoliuko 14",
+    bookingSecret: "KAVOL_BOOK_ICAL_URL",
+    airbnbSecret: "KAVOL_AIRBNB_ICAL_URL"
+  })
+});
+
 const ALLOWED_ORIGINS = new Set([
   "https://antanas-sukevicius.github.io",
   "https://mmt.lt",
@@ -121,9 +134,12 @@ async function fetchCalendar(url) {
   return parseIcs(await response.text());
 }
 
-async function getUnavailableDates(env) {
-  const bookingUrl = validateCalendarUrl(env.BOOKING_ICAL_URL, "ical.booking.com");
-  const airbnbUrl = validateCalendarUrl(env.AIRBNB_ICAL_URL, "www.airbnb.com");
+async function getUnavailableDates(env, propertyId) {
+  const property = PROPERTIES[propertyId];
+  if (!property) throw new Error("Unknown property");
+
+  const bookingUrl = validateCalendarUrl(env[property.bookingSecret], "ical.booking.com");
+  const airbnbUrl = validateCalendarUrl(env[property.airbnbSecret], "www.airbnb.com");
   const calendars = await Promise.all([
     fetchCalendar(bookingUrl),
     fetchCalendar(airbnbUrl)
@@ -202,6 +218,12 @@ async function submitBooking(request, env, origin) {
     return bookingResponse({ ok: true }, 200, origin);
   }
 
+  const propertyId = booking.propertyId === undefined ? "smolensko-35" : booking.propertyId;
+  if (typeof propertyId !== "string" || !Object.prototype.hasOwnProperty.call(PROPERTIES, propertyId)) {
+    return bookingResponse({ error: "Please choose a valid apartment." }, 400, origin);
+  }
+  const property = PROPERTIES[propertyId];
+
   const name = typeof booking.name === "string" ? cleanField(booking.name, 100) : "";
   const email = typeof booking.email === "string" ? cleanField(booking.email, 254) : "";
   const phone = typeof booking.phone === "string" ? cleanField(booking.phone, 40) : "";
@@ -228,7 +250,7 @@ async function submitBooking(request, env, origin) {
 
   let unavailableDates;
   try {
-    unavailableDates = new Set(await getUnavailableDates(env));
+    unavailableDates = new Set(await getUnavailableDates(env, propertyId));
   } catch (error) {
     console.error("Could not verify booking dates:", error.message);
     return bookingResponse({ error: "Availability could not be verified. Please try again shortly." }, 502, origin);
@@ -243,7 +265,8 @@ async function submitBooking(request, env, origin) {
   }
 
   const telegramMessage = [
-    "New booking request — Smolensko 35",
+    `New booking request — ${property.name}`,
+    `Property: ${property.name}`,
     `Name: ${name}`,
     `Email: ${email}`,
     `Phone: ${phone}`,
@@ -299,9 +322,15 @@ export default {
       return jsonResponse({ error: "Method not allowed" }, 405, origin);
     }
 
+    const propertyId = url.searchParams.get("propertyId") || "smolensko-35";
+    if (!Object.prototype.hasOwnProperty.call(PROPERTIES, propertyId)) {
+      return jsonResponse({ error: "Unknown property" }, 400, origin);
+    }
+
     try {
-      const unavailableDates = await getUnavailableDates(env);
+      const unavailableDates = await getUnavailableDates(env, propertyId);
       return jsonResponse({
+        propertyId,
         unavailableDates,
         updatedAt: new Date().toISOString()
       }, 200, origin);

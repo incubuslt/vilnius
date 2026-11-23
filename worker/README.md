@@ -6,15 +6,15 @@ reliably read cross-origin), combines their unavailable dates, rechecks new
 booking requests against current availability, and sends valid requests to a
 private Telegram chat.
 
-The Worker currently handles **Smolensko 35 only**. The frontend's Kavoliuko 14
-tab is a disabled placeholder, not a second configured property.
+The Worker supports **Smolensko 35** and **Kavoliuko 14**. Each property has a
+fixed pair of calendar secrets selected by a stable property ID.
 
 ## Important: rotate exposed calendar links
 
-The original iCal URLs were included in a public GitHub commit. Treat those feed
-links as exposed: regenerate the Booking.com and Airbnb links, then replace the
-Worker Secrets. Do not reuse the old URLs or add replacements to source control,
-documentation, screenshots, or chat.
+The original Smolensko 35 iCal URLs were included in a public GitHub commit.
+Treat those links as exposed: regenerate its Booking.com and Airbnb feeds, then
+replace `BOOKING_ICAL_URL` and `AIRBNB_ICAL_URL`. Do not reuse the old URLs or
+add replacements to source control, documentation, screenshots, or chat.
 
 ## Secrets and account setup
 
@@ -22,8 +22,10 @@ In Cloudflare, open **Workers & Pages → smolensko-calendar-api → Settings �
 Variables and Secrets**. Configure these as **Secrets**, not plaintext
 configuration:
 
-- `BOOKING_ICAL_URL` — regenerated Booking.com iCal feed URL.
-- `AIRBNB_ICAL_URL` — regenerated Airbnb iCal feed URL.
+- `BOOKING_ICAL_URL` — Smolensko 35 Booking.com iCal feed URL.
+- `AIRBNB_ICAL_URL` — Smolensko 35 Airbnb iCal feed URL.
+- `KAVOL_BOOK_ICAL_URL` — Kavoliuko 14 Booking.com iCal feed URL.
+- `KAVOL_AIRBNB_ICAL_URL` — Kavoliuko 14 Airbnb iCal feed URL.
 - `TELEGRAM_BOT_TOKEN` — private bot token from Telegram's `@BotFather`.
 - `TELEGRAM_CHAT_ID` — numeric private chat ID for the notification destination.
 
@@ -56,24 +58,29 @@ setting also changes the URLs of other Workers in the same Cloudflare account.
 
 ### `GET /api/calendar`
 
-Returns JSON with `unavailableDates` (sorted `YYYY-MM-DD` strings) and
-`updatedAt`. The response is cached for five minutes. Both feeds must load and
-parse successfully; on provider failure the Worker returns an error rather than
-assuming dates are available.
+Accepts `propertyId=smolensko-35` or `propertyId=kavoliuko-14` and returns that
+property's `unavailableDates` (sorted `YYYY-MM-DD` strings), `propertyId`, and
+`updatedAt`. If omitted, `propertyId` defaults to `smolensko-35` for
+compatibility. The response is cached for five minutes. Both selected feeds
+must load and parse successfully; on provider failure the Worker returns an
+error rather than assuming dates are available.
 
 ### `POST /api/booking`
 
-Accepts JSON with the guest's `name`, `email`, `phone`, `checkin`, `checkout`,
-`adults`, `children`, `message`, and honeypot `website` fields. The current
-frontend also sends `guests` (the adults-plus-children total) for compatibility
-with older Worker deployments. The Worker accepts either `adults` or legacy
-`guests`; missing `children` defaults to zero.
+Accepts JSON with the guest's `propertyId`, `name`, `email`, `phone`, `checkin`,
+`checkout`, `adults`, `children`, `message`, and honeypot `website` fields. The
+Worker only accepts known property IDs and defaults a missing `propertyId` to
+`smolensko-35` for compatibility. The frontend also sends `guests` (the
+adults-plus-children total) for compatibility with older Worker deployments.
+The Worker accepts either `adults` or legacy `guests`; missing `children`
+defaults to zero.
 
 The Worker validates guest details, dates, a maximum of four guests total, and
 the 300-character optional-message limit. It re-fetches both iCal feeds before
-accepting the request, then sends a Telegram message containing adult, child,
-and total guest counts. A successful response means a request notification was
-delivered; it is not an approval or booking confirmation.
+accepting the request, then sends a Telegram message identifying the selected
+property and containing adult, child, and total guest counts. A successful
+response means a request notification was delivered; it is not an approval or
+booking confirmation.
 
 Booking requests are limited to three per IP per minute using the
 `BOOKING_RATE_LIMITER` binding in `wrangler.toml`. A hidden honeypot field is
@@ -98,10 +105,9 @@ Worker. Do not use wildcard origins for booking requests.
 
 ## Adding another property
 
-Do not merely enable the Kavoliuko 14 tab. The Worker must first map each known
-property ID to a fixed pair of secrets; never accept arbitrary feed URLs from a
-browser. Make the selected property explicit in both calendar and booking
-requests, return only that property's availability, recheck bookings against
-that property's feeds, and include the property's name in Telegram
-notifications. Keep all secrets in Cloudflare and test each property's feeds
-and booking behavior independently before enabling the tab.
+The current fixed mapping is `smolensko-35` → `BOOKING_ICAL_URL` and
+`AIRBNB_ICAL_URL`, and `kavoliuko-14` → `KAVOL_BOOK_ICAL_URL` and
+`KAVOL_AIRBNB_ICAL_URL`. Never accept arbitrary feed URLs from a browser. When
+adding another property, extend the fixed mapping, make the property explicit
+in calendar and booking requests, return only its availability, and identify it
+in Telegram notifications. Keep all feed URLs in Cloudflare Secrets.
