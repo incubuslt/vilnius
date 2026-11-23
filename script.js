@@ -18,6 +18,8 @@ const state = {
   checkout: ""
 };
 
+document.documentElement.dataset.property = state.propertyId;
+
 const elements = {
   propertyTabs: [...document.querySelectorAll("[data-property-id]")],
   bookingPanel: document.getElementById("booking-panel"),
@@ -240,6 +242,7 @@ function setActiveProperty(propertyId) {
   if (!property || propertyId === state.propertyId) return;
 
   state.propertyId = propertyId;
+  document.documentElement.dataset.property = propertyId;
   state.unavailableDates = null;
   state.calendarError = "";
   state.checkin = "";
