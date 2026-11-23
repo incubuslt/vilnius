@@ -4,8 +4,8 @@
 const property = {
   name: "Smolensko 35"
 };
-const calendarApiUrl = "https://smolensko-calendar-api.antanas-sukevicius.workers.dev/api/calendar";
-const bookingApiUrl = "https://smolensko-calendar-api.antanas-sukevicius.workers.dev/api/booking";
+const calendarApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/calendar";
+const bookingApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/booking";
 
 const state = {
   unavailableDates: null,
