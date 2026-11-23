@@ -9,6 +9,7 @@
   --green: #237a59;
   --green-dark: #185f43;
   --green-soft: #e8f4ec;
+  --available-day: var(--green-soft);
   --range-fill: #b1d9bd;
   --range-border: #82b58f;
   --focus-outline: rgba(35, 122, 89, .35);
@@ -27,6 +28,7 @@ html[data-property="kavoliuko-14"] {
   --green: #926300;
   --green-dark: #694a00;
   --green-soft: #fff0c2;
+  --available-day: #fffaf0;
   --range-fill: #f3d37e;
   --range-border: #c79a2e;
   --focus-outline: rgba(146, 99, 0, .4);
@@ -69,7 +71,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .weekdays { margin-bottom: 4px; color: #86908b; font-size: .72rem; font-weight: 750; text-align: center; }
 .weekday { padding: 4px 0; }
-.day { position: relative; display: grid; min-width: 0; aspect-ratio: 1 / .88; place-items: center; border: 0; border-radius: 11px; color: var(--ink); background: var(--green-soft); font-size: .85rem; cursor: pointer; }
+.day { position: relative; display: grid; min-width: 0; aspect-ratio: 1 / .88; place-items: center; border: 0; border-radius: 11px; color: var(--ink); background: var(--available-day); font-size: .85rem; cursor: pointer; }
 .day:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--green); }
 .day.booked { color: #963c3c; background: var(--red-soft); text-decoration: line-through; cursor: not-allowed; }
 .day.past, .day.outside, .day.unknown, .day.outside-window { color: #a7afaa; background: #f2f3f1; cursor: not-allowed; }
@@ -78,7 +80,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .day.in-range { border-radius: 5px; color: var(--green-dark); background: var(--range-fill); box-shadow: inset 0 0 0 1px var(--range-border); }
 .calendar-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; color: var(--muted); font-size: .78rem; }
 .legend-item { display: inline-flex; align-items: center; gap: 7px; }
-.legend-swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--green-soft); }
+.legend-swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--available-day); }
 .legend-swatch.red { background: var(--red-soft); }
 .legend-swatch.gray { background: #f2f3f1; }
 .selected-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }

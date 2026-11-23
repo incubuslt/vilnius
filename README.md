@@ -34,7 +34,7 @@ explicitly approved for that change.
 
 - The calendar merges unavailable nights from both feeds through `/api/calendar`.
 - The property tabs switch between the Smolensko 35 and Kavoliuko 14 calendars;
-  Kavoliuko uses a warm yellow accent theme.
+  Kavoliuko uses warm yellow accents with warm-white available dates.
 - The page starts at the current month and allows navigation through the current month
   plus the next three full calendar months.
 - Check-in must be before the final day of the booking window; the last day is
