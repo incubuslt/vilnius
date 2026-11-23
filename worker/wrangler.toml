@@ -1,0 +1,13 @@
+name = "smolensko-calendar-api"
+main = "src/index.js"
+compatibility_date = "2026-11-16"
+workers_dev = true
+preview_urls = false
+
+[[ratelimits]]
+name = "BOOKING_RATE_LIMITER"
+namespace_id = "674215"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f8f6">
+  <meta name="description" content="A comfortable, thoughtfully equipped apartment in Vilnius. Check dates and send a direct booking request.">
+  <title>Smolensko 35 | Stay in Vilnius</title>
+  <link rel="stylesheet" href="styles.css?v=14">
+</head>
+<body>
+  <main>
+    <section class="section wrap" id="availability" aria-label="Apartment availability and booking">
+      <div class="property-tabs" role="tablist" aria-label="Choose an apartment">
+        <button class="property-tab" id="smolensko-35-tab" type="button" role="tab" aria-selected="true" aria-controls="smolensko-35-panel">
+          Smolensko 35
+        </button>
+        <button class="property-tab" id="kavoliuko-14-tab" type="button" role="tab" aria-selected="false" aria-disabled="true" disabled>
+          Kavoliuko 14 <span class="property-tab-note">Coming soon</span>
+        </button>
+      </div>
+      <div class="booking-layout" id="smolensko-35-panel" role="tabpanel" aria-labelledby="smolensko-35-tab">
+        <section class="panel calendar-panel" aria-labelledby="calendar-heading">
+          <div class="calendar-top">
+            <h3 id="calendar-heading">Smolensko 35 availability</h3>
+            <div class="month-controls">
+              <button class="icon-button" id="previous-month" type="button" aria-label="Previous month">‹</button>
+              <span class="month-title" id="month-title" aria-live="polite"></span>
+              <button class="icon-button" id="next-month" type="button" aria-label="Next month">›</button>
+            </div>
+          </div>
+          <p class="calendar-status" id="calendar-status" role="status" aria-live="polite">Loading calendar availability…</p>
+          <div class="weekdays" aria-hidden="true">
+            <span class="weekday">Mon</span><span class="weekday">Tue</span><span class="weekday">Wed</span>
+            <span class="weekday">Thu</span><span class="weekday">Fri</span><span class="weekday">Sat</span><span class="weekday">Sun</span>
+          </div>
+          <div class="calendar-days" id="calendar-days" role="group" aria-label="Select your check-in and check-out dates"></div>
+          <div class="calendar-legend" aria-label="Calendar key">
+            <span class="legend-item"><i class="legend-swatch"></i> Available</span>
+            <span class="legend-item"><i class="legend-swatch red"></i> Booked</span>
+            <span class="legend-item"><i class="legend-swatch gray"></i> Past / outside window / loading</span>
+          </div>
+          <div class="selected-dates">
+            <div class="date-summary"><small>Check-in</small><strong id="checkin-summary">Select a date</strong></div>
+            <div class="date-summary"><small>Check-out</small><strong id="checkout-summary">Select a date</strong></div>
+          </div>
+        </section>
+
+        <form class="panel form-panel" id="booking-form">
+          <h3>Send a booking request</h3>
+          <p>Up to 4 guests total. No payment is needed now.</p>
+          <div class="form-grid">
+            <div class="honeypot" aria-hidden="true">
+              <label for="website">Leave this field empty</label>
+              <input id="website" name="website" tabindex="-1" autocomplete="off">
+            </div>
+            <div class="field full">
+              <label for="guest-name">Full name</label>
+              <input id="guest-name" name="name" autocomplete="name" placeholder="Your full name" required>
+            </div>
+            <div class="guest-fields">
+              <div class="field">
+                <label for="adult-count">Adults</label>
+                <select id="adult-count" name="adults" required>
+                  <option value="" selected>Select</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="child-count">Children (16 and under)</label>
+                <select id="child-count" name="children">
+                  <option value="0" selected>No children</option>
+                  <option value="1">1 child</option>
+                  <option value="2">2 children</option>
+                  <option value="3">3 children</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="guest-email">Email</label>
+              <input id="guest-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+            </div>
+            <div class="field">
+              <label for="guest-phone">Phone</label>
+              <input id="guest-phone" name="phone" type="tel" autocomplete="tel" placeholder="Include country code" required>
+            </div>
+            <div class="field">
+              <label for="checkin-input">Check-in</label>
+              <input id="checkin-input" name="checkin" type="date" required>
+            </div>
+            <div class="field">
+              <label for="checkout-input">Check-out</label>
+              <input id="checkout-input" name="checkout" type="date" required>
+            </div>
+            <div class="field full">
+              <label for="guest-message">Message <span style="font-weight:400;color:#7a8580">(optional)</span></label>
+              <textarea id="guest-message" name="message" maxlength="300" placeholder="Tell us anything we should know about your stay…"></textarea>
+              <small class="character-count" id="message-character-count">0 / 300</small>
+            </div>
+          </div>
+          <button class="button form-submit" type="submit">Request to book <span aria-hidden="true">→</span></button>
+          <p class="form-note">Your request is sent securely to the host via Telegram.</p>
+          <div class="form-feedback" id="form-feedback" role="status"></div>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="script.js?v=8" defer></script>
+</body>
+</html>
