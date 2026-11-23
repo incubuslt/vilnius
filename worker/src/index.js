@@ -1,5 +1,7 @@
 const ALLOWED_ORIGINS = new Set([
   "https://antanas-sukevicius.github.io",
+  "https://mmt.lt",
+  "https://www.mmt.lt",
   "http://localhost:5500",
   "http://127.0.0.1:5500"
 ]);
