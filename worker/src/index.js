@@ -1,3 +1,5 @@
+import pricingConfig from "./pricing-config.json";
+
 const PROPERTIES = Object.freeze({
   "smolensko-35": Object.freeze({
     name: "Smolensko 35",
@@ -19,6 +21,7 @@ const BOOKING_PRICE_SOURCE = Object.freeze({
 });
 const BOOKING_PRICE_QUERY_HASH = "5db8c67304471b7e3544df89121e647ba91a78f871ece6a60872965400d27df8";
 const BOOKING_PRICE_DAYS_PER_REQUEST = 61;
+const PRICING_SUPPORTED_PROPERTY = "smolensko-35";
 
 const ALLOWED_ORIGINS = new Set([
   "https://antanas-sukevicius.github.io",
@@ -178,7 +181,7 @@ function parseBookingPrice(value) {
 }
 
 async function getBookingPrices(propertyId) {
-  const source = propertyId === "smolensko-35" ? BOOKING_PRICE_SOURCE : null;
+  const source = propertyId === PRICING_SUPPORTED_PROPERTY ? BOOKING_PRICE_SOURCE : null;
   if (!source) return {};
 
   const { start, end, startDate, endDate } = getPriceDateRange();
@@ -195,7 +198,7 @@ async function getBookingPrices(propertyId) {
     const url = new URL("https://www.booking.com/dml/graphql");
     url.searchParams.set("dest_id", source.destinationId);
     url.searchParams.set("dest_type", "city");
-    url.searchParams.set("group_adults", "3");
+    url.searchParams.set("group_adults", String(pricingConfig.baseGuests));
     url.searchParams.set("no_rooms", "1");
     url.searchParams.set("group_children", "0");
     url.searchParams.set("all_sr_blocks", source.blockId);
@@ -222,7 +225,7 @@ async function getBookingPrices(propertyId) {
             pagenameDetails: { countryCode: "lt", pagename: source.pagename },
             searchConfig: {
               searchConfigDate: { startDate: chunkStart, amountOfDays },
-              nbAdults: 3,
+              nbAdults: pricingConfig.baseGuests,
               nbRooms: 1,
               nbChildren: 0,
               childrenAges: []
@@ -259,6 +262,24 @@ async function getBookingPrices(propertyId) {
   }
 
   return prices;
+}
+
+function validatePricingConfig(config) {
+  return Number.isInteger(config.baseGuests) &&
+    config.baseGuests >= 1 &&
+    config.baseGuests <= 4 &&
+    Number.isFinite(config.additionalGuestPerNightEUR) &&
+    config.additionalGuestPerNightEUR >= 0 &&
+    Number.isFinite(config.discountPercent) &&
+    config.discountPercent >= 0 &&
+    config.discountPercent <= 100 &&
+    Number.isFinite(config.weeklyDiscountPercent) &&
+    config.weeklyDiscountPercent >= 0 &&
+    config.weeklyDiscountPercent <= 100 &&
+    Number.isInteger(config.weeklyDiscountMinimumNights) &&
+    config.weeklyDiscountMinimumNights >= 1 &&
+    Number.isFinite(config.oneNightSurchargePercent) &&
+    config.oneNightSurchargePercent >= 0;
 }
 
 function cleanField(value, maxLength) {
@@ -446,11 +467,16 @@ export default {
 
     if (url.pathname === "/api/prices") {
       try {
+        if (propertyId === PRICING_SUPPORTED_PROPERTY && !validatePricingConfig(pricingConfig)) {
+          throw new Error("Pricing configuration is invalid");
+        }
         const prices = await getBookingPrices(propertyId);
+        const pricingSupported = propertyId === PRICING_SUPPORTED_PROPERTY;
         return jsonResponse({
           propertyId,
-          pricingSupported: propertyId === "smolensko-35",
+          pricingSupported,
           prices,
+          pricingConfig: pricingSupported ? pricingConfig : null,
           updatedAt: new Date().toISOString()
         }, 200, origin);
       } catch (error) {

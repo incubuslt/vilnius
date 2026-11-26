@@ -10,6 +10,7 @@ GitHub Pages.
 - `styles.css` — responsive layout and calendar/form styling.
 - `script.js` — calendar rendering, date selection, client-side validation, and API calls.
 - `worker/src/index.js` — Cloudflare Worker for iCal availability and Telegram notifications.
+- `worker/src/pricing-config.json` — editable guest fees and stay discounts/surcharges.
 - `worker/wrangler.toml` — Worker name, entry point, runtime date, and rate-limit binding.
 - `worker/README.md` — Worker secrets, account setup, and deployment instructions.
 - `CNAME` — GitHub Pages custom domain (`mmt.lt`).
@@ -33,10 +34,12 @@ explicitly approved for that change.
 ## Frontend behavior
 
 - The calendar merges unavailable nights from both feeds through `/api/calendar`.
-- Smolensko 35 also displays nightly Booking.com rates for three adults through
-  `/api/prices`. Rates cover the visible booking window (the current month plus
-  the next three months); dates with no available rate are left blank. Kavoliuko
-  14 has no configured rate source.
+- Smolensko 35 displays Booking.com nightly rates based on one guest, adjusts
+  for guest count, and shows an estimate for the selected stay. Guest fees,
+  discounts, and surcharges are configured in
+  `worker/src/pricing-config.json`. Rates cover the visible booking window
+  (the current month plus the next three months); dates with no available rate
+  are left blank. Kavoliuko 14 has no configured rate source.
 - The property tabs switch between the Smolensko 35 and Kavoliuko 14 calendars;
   Kavoliuko uses warm yellow accents with warm-white available dates.
 - The page starts at the current month and allows navigation through the current month

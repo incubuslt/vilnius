@@ -88,8 +88,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .legend-swatch.gray { background: #f2f3f1; }
 .selected-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .date-summary { padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; }
+.price-summary { grid-column: 1 / -1; }
 .date-summary small { display: block; margin-bottom: 4px; color: var(--muted); }
 .date-summary strong { font-size: .9rem; }
+.price-details { margin: 4px 0 0 !important; font-size: .76rem; }
 .form-panel h3 { margin-bottom: 7px; }
 .form-panel > p { margin: 0 0 10px; color: var(--muted); font-size: .85rem; line-height: 1.45; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }

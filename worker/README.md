@@ -68,13 +68,34 @@ error rather than assuming dates are available.
 ### `GET /api/prices`
 
 Accepts `propertyId=smolensko-35` or `propertyId=kavoliuko-14`. Smolensko 35
-returns available nightly prices in EUR for three adults for the current month
-and next three months. Dates without a positive Booking.com rate are omitted.
-The response includes `propertyId`, `pricingSupported`, `prices` (keyed by
-`YYYY-MM-DD`), and `updatedAt`. Kavoliuko 14 returns an empty price map because
-it has no configured Booking.com rate source. The Worker requests Booking.com
-in date chunks of at most 61 days; upstream errors return an error response and
-do not affect calendar availability.
+returns available Booking.com nightly prices in EUR for one guest for the
+current month and next three months. The response includes `propertyId`,
+`pricingSupported`, base `prices` (keyed by `YYYY-MM-DD`), `pricingConfig`, and
+`updatedAt`. Kavoliuko 14 returns an empty price map because it has no
+configured Booking.com rate source. The Worker requests Booking.com in date
+chunks of at most 61 days; upstream errors return an error response and do not
+affect calendar availability.
+
+### Pricing configuration
+
+Edit [`src/pricing-config.json`](./src/pricing-config.json) to set Smolensko
+35's calculation rules, then deploy the Worker:
+
+- `baseGuests`: guests covered by the Booking.com base price (currently one).
+- `additionalGuestPerNightEUR`: added per guest above `baseGuests`, per night
+  (currently €5; children count as guests too).
+- `discountPercent`: percentage discount applied to the nightly price after
+  additional-guest fees.
+- `weeklyDiscountPercent`: percentage discount applied to the stay total when
+  the stay is at least `weeklyDiscountMinimumNights` nights.
+- `weeklyDiscountMinimumNights`: minimum stay length for the weekly discount
+  (currently six nights).
+- `oneNightSurchargePercent`: percentage surcharge applied to a one-night
+  stay total.
+
+Discounts and surcharges default to zero. The calendar reflects the selected
+guest count; weekly discounts and one-night surcharges are shown in the
+selected-stay estimate.
 
 ### `POST /api/booking`
 

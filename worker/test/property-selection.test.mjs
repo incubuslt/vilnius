@@ -3,8 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+const pricingConfig = JSON.parse(
+  await readFile(new URL("../src/pricing-config.json", import.meta.url), "utf8")
+);
+const bundledSource = source.replace(
+  'import pricingConfig from "./pricing-config.json";',
+  `const pricingConfig = ${JSON.stringify(pricingConfig)};`
+);
 const { default: worker } = await import(
-  `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+  `data:text/javascript;base64,${Buffer.from(bundledSource).toString("base64")}`
 );
 
 function makeCalendar(start, end) {
@@ -118,9 +125,11 @@ test("price requests return only available positive nightly rates for Smolensko"
   assert.equal(response.status, 200);
   assert.equal(body.propertyId, "smolensko-35");
   assert.equal(body.pricingSupported, true);
+  assert.deepEqual(body.pricingConfig, pricingConfig);
   assert.ok(requests.length >= 2 && requests.length <= 3);
-  assert.ok(requests.every(({ payload, amountOfDays }) =>
-    payload.variables.input.searchConfig.nbAdults === 3 &&
+  assert.ok(requests.every(({ url, payload, amountOfDays }) =>
+    payload.variables.input.searchConfig.nbAdults === 1 &&
+    url.searchParams.get("group_adults") === "1" &&
     amountOfDays > 0 &&
     amountOfDays <= 61
   ));

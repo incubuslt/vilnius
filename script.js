@@ -1,7 +1,7 @@
 "use strict";
 
 const properties = new Map([
-  ["smolensko-35", { name: "Smolensko 35", priceAdults: 3 }],
+  ["smolensko-35", { name: "Smolensko 35", pricingSupported: true }],
   ["kavoliuko-14", { name: "Kavoliuko 14" }]
 ]);
 const calendarApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/calendar";
@@ -12,6 +12,7 @@ const state = {
   propertyId: "smolensko-35",
   unavailableDates: null,
   prices: null,
+  pricingConfig: null,
   pricingSupported: true,
   pricingLoading: true,
   pricingError: "",
@@ -37,6 +38,9 @@ const elements = {
   nextMonth: document.getElementById("next-month"),
   checkinSummary: document.getElementById("checkin-summary"),
   checkoutSummary: document.getElementById("checkout-summary"),
+  priceSummary: document.getElementById("price-summary"),
+  priceTotal: document.getElementById("price-total"),
+  priceDetails: document.getElementById("price-details"),
   checkinInput: document.getElementById("checkin-input"),
   checkoutInput: document.getElementById("checkout-input"),
   adultCount: document.getElementById("adult-count"),
@@ -49,12 +53,13 @@ const elements = {
 
 async function loadPrices(propertyId, requestId) {
   const property = properties.get(propertyId);
-  state.pricingSupported = Boolean(property.priceAdults);
-  state.prices = property.priceAdults ? null : {};
-  state.pricingLoading = Boolean(property.priceAdults);
+  state.pricingSupported = Boolean(property.pricingSupported);
+  state.prices = property.pricingSupported ? null : {};
+  state.pricingConfig = null;
+  state.pricingLoading = Boolean(property.pricingSupported);
   state.pricingError = "";
   renderCalendar();
-  if (!property.priceAdults) return;
+  if (!property.pricingSupported) return;
 
   try {
     const url = new URL(pricesApiUrl);
@@ -63,11 +68,13 @@ async function loadPrices(propertyId, requestId) {
     if (!response.ok) throw new Error(`Price service returned HTTP ${response.status}`);
     const result = await response.json();
     const prices = result.prices;
+    const config = result.pricingConfig;
     if (result.propertyId !== propertyId ||
         result.pricingSupported !== true ||
         !prices ||
         typeof prices !== "object" ||
         Array.isArray(prices) ||
+        !isValidPricingConfig(config) ||
         !Object.entries(prices).every(([date, price]) =>
           /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(price) && price > 0
         )) {
@@ -75,10 +82,12 @@ async function loadPrices(propertyId, requestId) {
     }
     if (requestId !== state.calendarRequestId) return;
     state.prices = prices;
+    state.pricingConfig = config;
   } catch (error) {
     if (requestId !== state.calendarRequestId) return;
     console.error(`Unable to load Booking.com prices for ${property.name}:`, error);
     state.prices = {};
+    state.pricingConfig = null;
     state.pricingError = "Booking.com prices could not be loaded. Rates are temporarily unavailable.";
   } finally {
     if (requestId === state.calendarRequestId) {
@@ -86,6 +95,25 @@ async function loadPrices(propertyId, requestId) {
       renderCalendar();
     }
   }
+}
+
+function isValidPricingConfig(config) {
+  return Boolean(config) &&
+    Number.isInteger(config.baseGuests) &&
+    config.baseGuests >= 1 &&
+    config.baseGuests <= 4 &&
+    Number.isFinite(config.additionalGuestPerNightEUR) &&
+    config.additionalGuestPerNightEUR >= 0 &&
+    Number.isFinite(config.discountPercent) &&
+    config.discountPercent >= 0 &&
+    config.discountPercent <= 100 &&
+    Number.isFinite(config.weeklyDiscountPercent) &&
+    config.weeklyDiscountPercent >= 0 &&
+    config.weeklyDiscountPercent <= 100 &&
+    Number.isInteger(config.weeklyDiscountMinimumNights) &&
+    config.weeklyDiscountMinimumNights >= 1 &&
+    Number.isFinite(config.oneNightSurchargePercent) &&
+    config.oneNightSurchargePercent >= 0;
 }
 
 // Use local calendar dates for the visible booking dates, avoiding UTC date drift.
@@ -104,6 +132,57 @@ function parseDateKey(value) {
 function formatDate(value) {
   if (!value) return "Select a date";
   return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(parseDateKey(value));
+}
+
+function getGuestCount() {
+  const selectedAdults = Number(elements.adultCount.value);
+  const adults = Number.isInteger(selectedAdults) && selectedAdults >= 1
+    ? selectedAdults
+    : state.pricingConfig?.baseGuests || 1;
+  return adults + Number(elements.childCount.value || 0);
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+function getNightlyPrice(basePrice, guestCount) {
+  if (!state.pricingConfig) return basePrice;
+  const extraGuests = Math.max(0, guestCount - state.pricingConfig.baseGuests);
+  const priceWithGuestFees =
+    basePrice + extraGuests * state.pricingConfig.additionalGuestPerNightEUR;
+  return Math.round(
+    priceWithGuestFees * (1 - state.pricingConfig.discountPercent / 100) * 100
+  ) / 100;
+}
+
+function calculateStayPrice(checkin, checkout, guestCount) {
+  if (!state.prices || !state.pricingConfig || !checkin || !checkout) return null;
+
+  const cursor = parseDateKey(checkin);
+  const end = parseDateKey(checkout);
+  let total = 0;
+  let nights = 0;
+  while (cursor < end) {
+    const basePrice = state.prices[toDateKey(cursor)];
+    if (!Number.isFinite(basePrice) || basePrice <= 0) return null;
+    total += getNightlyPrice(basePrice, guestCount);
+    nights += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (nights === 1) {
+    total *= 1 + state.pricingConfig.oneNightSurchargePercent / 100;
+  } else if (nights >= state.pricingConfig.weeklyDiscountMinimumNights) {
+    total *= 1 - state.pricingConfig.weeklyDiscountPercent / 100;
+  }
+
+  return { nights, total: Math.round(total * 100) / 100 };
 }
 
 function getBookingWindow() {
@@ -199,11 +278,13 @@ function renderCalendar() {
   if (state.pricingError) {
     elements.calendarPriceNote.textContent = state.pricingError;
   } else if (state.pricingLoading) {
-    elements.calendarPriceNote.textContent =
-      `Loading nightly Booking.com rates for ${properties.get(state.propertyId).priceAdults} adults…`;
+    elements.calendarPriceNote.textContent = "Loading Booking.com rates…";
   } else if (state.pricingSupported) {
+    const guestCount = getGuestCount();
+    const extraGuestPrice = state.pricingConfig.additionalGuestPerNightEUR;
     elements.calendarPriceNote.textContent =
-      `Nightly Booking.com rates for ${properties.get(state.propertyId).priceAdults} adults; dates without a rate are left blank.`;
+      `Rates shown for ${guestCount} guest${guestCount === 1 ? "" : "s"}; ` +
+      `${formatCurrency(extraGuestPrice)} per extra guest/night. Stay adjustments appear in the estimate.`;
   } else {
     elements.calendarPriceNote.textContent = "";
   }
@@ -231,14 +312,12 @@ function renderCalendar() {
     const startsNewSelection = !state.checkin || Boolean(state.checkout) || key <= state.checkin;
     const checkoutOnly = key === bookingWindow.lastDateKey && startsNewSelection;
     const disabled = past || booked || unknown || outsideWindow || checkoutOnly;
-    const price = state.prices && state.prices[key];
+    const basePrice = state.prices && state.prices[key];
+    const price = Number.isFinite(basePrice) && state.pricingConfig
+      ? getNightlyPrice(basePrice, getGuestCount())
+      : basePrice;
     const priceText = Number.isFinite(price) && price > 0
-      ? new Intl.NumberFormat("en-GB", {
-        style: "currency",
-        currency: "EUR",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2
-      }).format(price)
+      ? formatCurrency(price)
       : "";
     const classes = ["day"];
     if (booked) classes.push("booked");
@@ -259,7 +338,7 @@ function renderCalendar() {
               ? "availability not loaded"
               : "available";
     const priceLabel = priceText
-      ? `, ${priceText} per night for ${properties.get(state.propertyId).priceAdults} adults`
+      ? `, ${priceText} per night for ${getGuestCount()} guest${getGuestCount() === 1 ? "" : "s"}`
       : "";
     const label = `${formatDate(key)}, ${availabilityLabel}${priceLabel}`;
     html += `<button class="${classes.join(" ")}" type="button" data-date="${key}" aria-label="${label}"${disabled ? " disabled" : ""}${selected ? ' aria-pressed="true"' : ""}><span class="day-number">${dayNumber}</span>${priceText ? `<span class="day-price">${priceText}</span>` : ""}</button>`;
@@ -270,12 +349,51 @@ function renderCalendar() {
   });
   elements.checkinSummary.textContent = formatDate(state.checkin);
   elements.checkoutSummary.textContent = formatDate(state.checkout);
+  renderPriceSummary();
   elements.checkinInput.value = state.checkin;
   elements.checkoutInput.value = state.checkout;
   elements.checkinInput.min = todayKey;
   elements.checkinInput.max = bookingWindow.lastCheckinKey;
   elements.checkoutInput.min = state.checkin || todayKey;
   elements.checkoutInput.max = bookingWindow.lastDateKey;
+}
+
+function renderPriceSummary() {
+  const hasStay = state.pricingSupported && state.checkin && state.checkout;
+  elements.priceSummary.hidden = !hasStay;
+  if (!hasStay) return;
+
+  if (state.pricingLoading) {
+    elements.priceTotal.textContent = "Loading…";
+    elements.priceDetails.textContent = "";
+    return;
+  }
+  if (state.pricingError || !state.pricingConfig) {
+    elements.priceTotal.textContent = "Temporarily unavailable";
+    elements.priceDetails.textContent = "Booking.com rates could not be loaded.";
+    return;
+  }
+
+  const guestCount = getGuestCount();
+  const estimate = calculateStayPrice(state.checkin, state.checkout, guestCount);
+  if (!estimate) {
+    elements.priceTotal.textContent = "Price unavailable";
+    elements.priceDetails.textContent = "A rate is missing for one or more selected nights.";
+    return;
+  }
+
+  elements.priceTotal.textContent = formatCurrency(estimate.total);
+  const adjustments = [];
+  if (estimate.nights === 1 && state.pricingConfig.oneNightSurchargePercent > 0) {
+    adjustments.push(`${state.pricingConfig.oneNightSurchargePercent}% one-night surcharge`);
+  } else if (estimate.nights >= state.pricingConfig.weeklyDiscountMinimumNights &&
+      state.pricingConfig.weeklyDiscountPercent > 0) {
+    adjustments.push(`${state.pricingConfig.weeklyDiscountPercent}% weekly discount`);
+  }
+  elements.priceDetails.textContent =
+    `${estimate.nights} night${estimate.nights === 1 ? "" : "s"} · ` +
+    `${guestCount} guest${guestCount === 1 ? "" : "s"}` +
+    (adjustments.length ? ` · ${adjustments.join(", ")}` : "");
 }
 
 function selectDate(dateKey) {
@@ -318,8 +436,9 @@ function setActiveProperty(propertyId) {
   document.documentElement.dataset.property = propertyId;
   state.unavailableDates = null;
   state.prices = null;
-  state.pricingSupported = Boolean(property.priceAdults);
-  state.pricingLoading = Boolean(property.priceAdults);
+  state.pricingConfig = null;
+  state.pricingSupported = Boolean(property.pricingSupported);
+  state.pricingLoading = Boolean(property.pricingSupported);
   state.pricingError = "";
   state.calendarError = "";
   state.checkin = "";
@@ -469,8 +588,14 @@ elements.propertyTabs.forEach((tab) => {
     setActiveProperty(nextTab.dataset.propertyId);
   });
 });
-elements.adultCount.addEventListener("change", validateGuestCounts);
-elements.childCount.addEventListener("change", validateGuestCounts);
+elements.adultCount.addEventListener("change", () => {
+  validateGuestCounts();
+  renderCalendar();
+});
+elements.childCount.addEventListener("change", () => {
+  validateGuestCounts();
+  renderCalendar();
+});
 elements.message.addEventListener("input", () => {
   if (elements.message.value.length > 300) {
     elements.message.value = elements.message.value.slice(0, 300);

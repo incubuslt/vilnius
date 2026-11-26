@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f8f8f6">
   <meta name="description" content="A comfortable, thoughtfully equipped apartment in Vilnius. Check dates and send a direct booking request.">
   <title>Smolensko 35 | Stay in Vilnius</title>
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <main>
@@ -44,6 +44,11 @@
           <div class="selected-dates">
             <div class="date-summary"><small>Check-in</small><strong id="checkin-summary">Select a date</strong></div>
             <div class="date-summary"><small>Check-out</small><strong id="checkout-summary">Select a date</strong></div>
+            <div class="date-summary price-summary" id="price-summary" hidden>
+              <small>Estimated stay total</small>
+              <strong id="price-total"></strong>
+              <small class="price-details" id="price-details"></small>
+            </div>
           </div>
         </section>
 
@@ -111,6 +116,6 @@
 
   </main>
 
-  <script src="script.js?v=12" defer></script>
+  <script src="script.js?v=13" defer></script>
 </body>
 </html>
