@@ -65,7 +65,7 @@ async function loadPrices(propertyId, requestId) {
   try {
     const url = new URL(pricesApiUrl);
     url.searchParams.set("propertyId", propertyId);
-    url.searchParams.set("v", "2");
+    url.searchParams.set("v", "3");
     const response = await fetch(url, { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`Price service returned HTTP ${response.status}`);
     const result = await response.json();
