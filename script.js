@@ -398,7 +398,7 @@ function renderPriceSummary() {
   if (!state.pricingSupported) return;
 
   if (!state.checkin || !state.checkout) {
-    elements.priceTotal.textContent = "Select dates";
+    elements.priceTotal.textContent = "€---";
     elements.priceMeta.textContent = "Choose check-in and check-out to see your estimate.";
     elements.priceDetails.replaceChildren();
     return;
