@@ -2,9 +2,9 @@
 
 The static site is hosted by GitHub Pages at <https://mmt.lt>. The Cloudflare
 Worker fetches the Booking.com and Airbnb iCal feeds (which browsers cannot
-reliably read cross-origin), combines their unavailable dates, rechecks new
-booking requests against current availability, and sends valid requests to a
-private Telegram chat.
+reliably read cross-origin), combines their unavailable dates, retrieves
+Smolensko 35's nightly Booking.com rates, rechecks new booking requests against
+current availability, and sends valid requests to a private Telegram chat.
 
 The Worker supports **Smolensko 35** and **Kavoliuko 14**. Each property has a
 fixed pair of calendar secrets selected by a stable property ID.
@@ -64,6 +64,17 @@ property's `unavailableDates` (sorted `YYYY-MM-DD` strings), `propertyId`, and
 compatibility. The response is cached for five minutes. Both selected feeds
 must load and parse successfully; on provider failure the Worker returns an
 error rather than assuming dates are available.
+
+### `GET /api/prices`
+
+Accepts `propertyId=smolensko-35` or `propertyId=kavoliuko-14`. Smolensko 35
+returns available nightly prices in EUR for three adults for the current month
+and next three months. Dates without a positive Booking.com rate are omitted.
+The response includes `propertyId`, `pricingSupported`, `prices` (keyed by
+`YYYY-MM-DD`), and `updatedAt`. Kavoliuko 14 returns an empty price map because
+it has no configured Booking.com rate source. The Worker requests Booking.com
+in date chunks of at most 61 days; upstream errors return an error response and
+do not affect calendar availability.
 
 ### `POST /api/booking`
 

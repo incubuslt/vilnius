@@ -83,6 +83,55 @@ test("calendar requests use only the selected property's two feeds", async (t) =
   assert.ok(requestedUrls.every((url) => url.includes("kavoliuko.ics")));
 });
 
+test("price requests return only available positive nightly rates for Smolensko", async (t) => {
+  const requests = [];
+  await withMockedFetch(t, async (input, init) => {
+    const url = new URL(input);
+    assert.equal(url.hostname, "www.booking.com");
+    const payload = JSON.parse(init.body);
+    const { startDate, amountOfDays } = payload.variables.input.searchConfig.searchConfigDate;
+    requests.push({ url, payload, startDate, amountOfDays });
+
+    const nextDate = new Date(`${startDate}T00:00:00Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const nextDateKey = nextDate.toISOString().slice(0, 10);
+    return new Response(JSON.stringify({
+      data: {
+        availabilityCalendar: {
+          hotelId: 17547944,
+          days: [
+            { checkin: startDate, available: true, avgPriceFormatted: "€\u00a094" },
+            { checkin: nextDateKey, available: false, avgPriceFormatted: "€\u00a0100" },
+            { checkin: nextDateKey, available: true, avgPriceFormatted: "€\u00a00" }
+          ]
+        }
+      }
+    }));
+  });
+
+  const response = await worker.fetch(
+    makeRequest("/api/prices?propertyId=smolensko-35"),
+    makeEnv()
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.propertyId, "smolensko-35");
+  assert.equal(body.pricingSupported, true);
+  assert.ok(requests.length >= 2 && requests.length <= 3);
+  assert.ok(requests.every(({ payload, amountOfDays }) =>
+    payload.variables.input.searchConfig.nbAdults === 3 &&
+    amountOfDays > 0 &&
+    amountOfDays <= 61
+  ));
+  for (const { startDate } of requests) {
+    assert.equal(body.prices[startDate], 94);
+    const nextDate = new Date(`${startDate}T00:00:00Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    assert.equal(body.prices[nextDate.toISOString().slice(0, 10)], undefined);
+  }
+});
+
 test("Kavoliuko booking notifications identify the selected apartment", async (t) => {
   const requestedUrls = [];
   let telegramMessage = "";

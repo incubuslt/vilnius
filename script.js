@@ -1,15 +1,20 @@
 "use strict";
 
 const properties = new Map([
-  ["smolensko-35", { name: "Smolensko 35" }],
+  ["smolensko-35", { name: "Smolensko 35", priceAdults: 3 }],
   ["kavoliuko-14", { name: "Kavoliuko 14" }]
 ]);
 const calendarApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/calendar";
+const pricesApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/prices";
 const bookingApiUrl = "https://smolensko-calendar-api.vilnius-mmt.workers.dev/api/booking";
 
 const state = {
   propertyId: "smolensko-35",
   unavailableDates: null,
+  prices: null,
+  pricingSupported: true,
+  pricingLoading: true,
+  pricingError: "",
   calendarLoading: true,
   calendarError: "",
   calendarRequestId: 0,
@@ -26,6 +31,7 @@ const elements = {
   calendarHeading: document.getElementById("calendar-heading"),
   calendarDays: document.getElementById("calendar-days"),
   calendarStatus: document.getElementById("calendar-status"),
+  calendarPriceNote: document.getElementById("calendar-price-note"),
   monthTitle: document.getElementById("month-title"),
   previousMonth: document.getElementById("previous-month"),
   nextMonth: document.getElementById("next-month"),
@@ -40,6 +46,47 @@ const elements = {
   form: document.getElementById("booking-form"),
   feedback: document.getElementById("form-feedback")
 };
+
+async function loadPrices(propertyId, requestId) {
+  const property = properties.get(propertyId);
+  state.pricingSupported = Boolean(property.priceAdults);
+  state.prices = property.priceAdults ? null : {};
+  state.pricingLoading = Boolean(property.priceAdults);
+  state.pricingError = "";
+  renderCalendar();
+  if (!property.priceAdults) return;
+
+  try {
+    const url = new URL(pricesApiUrl);
+    url.searchParams.set("propertyId", propertyId);
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Price service returned HTTP ${response.status}`);
+    const result = await response.json();
+    const prices = result.prices;
+    if (result.propertyId !== propertyId ||
+        result.pricingSupported !== true ||
+        !prices ||
+        typeof prices !== "object" ||
+        Array.isArray(prices) ||
+        !Object.entries(prices).every(([date, price]) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(price) && price > 0
+        )) {
+      throw new Error("Price service returned invalid pricing data");
+    }
+    if (requestId !== state.calendarRequestId) return;
+    state.prices = prices;
+  } catch (error) {
+    if (requestId !== state.calendarRequestId) return;
+    console.error(`Unable to load Booking.com prices for ${property.name}:`, error);
+    state.prices = {};
+    state.pricingError = "Booking.com prices could not be loaded. Rates are temporarily unavailable.";
+  } finally {
+    if (requestId === state.calendarRequestId) {
+      state.pricingLoading = false;
+      renderCalendar();
+    }
+  }
+}
 
 // Use local calendar dates for the visible booking dates, avoiding UTC date drift.
 function toDateKey(date) {
@@ -80,6 +127,7 @@ async function loadCalendar() {
   const propertyId = state.propertyId;
   state.calendarLoading = true;
   state.calendarError = "";
+  void loadPrices(propertyId, requestId);
   renderCalendar();
   try {
     const url = new URL(calendarApiUrl);
@@ -147,6 +195,19 @@ function renderCalendar() {
     elements.calendarStatus.className = "calendar-status success";
   }
 
+  elements.calendarPriceNote.hidden = !state.pricingSupported;
+  if (state.pricingError) {
+    elements.calendarPriceNote.textContent = state.pricingError;
+  } else if (state.pricingLoading) {
+    elements.calendarPriceNote.textContent =
+      `Loading nightly Booking.com rates for ${properties.get(state.propertyId).priceAdults} adults…`;
+  } else if (state.pricingSupported) {
+    elements.calendarPriceNote.textContent =
+      `Nightly Booking.com rates for ${properties.get(state.propertyId).priceAdults} adults; dates without a rate are left blank.`;
+  } else {
+    elements.calendarPriceNote.textContent = "";
+  }
+
   const firstDay = new Date(year, month, 1);
   const mondayOffset = (firstDay.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -170,6 +231,15 @@ function renderCalendar() {
     const startsNewSelection = !state.checkin || Boolean(state.checkout) || key <= state.checkin;
     const checkoutOnly = key === bookingWindow.lastDateKey && startsNewSelection;
     const disabled = past || booked || unknown || outsideWindow || checkoutOnly;
+    const price = state.prices && state.prices[key];
+    const priceText = Number.isFinite(price) && price > 0
+      ? new Intl.NumberFormat("en-GB", {
+        style: "currency",
+        currency: "EUR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      }).format(price)
+      : "";
     const classes = ["day"];
     if (booked) classes.push("booked");
     if (past) classes.push("past");
@@ -188,8 +258,11 @@ function renderCalendar() {
             : unknown
               ? "availability not loaded"
               : "available";
-    const label = `${formatDate(key)}, ${availabilityLabel}`;
-    html += `<button class="${classes.join(" ")}" type="button" data-date="${key}" aria-label="${label}"${disabled ? " disabled" : ""}${selected ? ' aria-pressed="true"' : ""}>${dayNumber}</button>`;
+    const priceLabel = priceText
+      ? `, ${priceText} per night for ${properties.get(state.propertyId).priceAdults} adults`
+      : "";
+    const label = `${formatDate(key)}, ${availabilityLabel}${priceLabel}`;
+    html += `<button class="${classes.join(" ")}" type="button" data-date="${key}" aria-label="${label}"${disabled ? " disabled" : ""}${selected ? ' aria-pressed="true"' : ""}><span class="day-number">${dayNumber}</span>${priceText ? `<span class="day-price">${priceText}</span>` : ""}</button>`;
   }
   elements.calendarDays.innerHTML = html;
   elements.calendarDays.querySelectorAll("[data-date]:not(:disabled)").forEach((button) => {
@@ -244,6 +317,10 @@ function setActiveProperty(propertyId) {
   state.propertyId = propertyId;
   document.documentElement.dataset.property = propertyId;
   state.unavailableDates = null;
+  state.prices = null;
+  state.pricingSupported = Boolean(property.priceAdults);
+  state.pricingLoading = Boolean(property.priceAdults);
+  state.pricingError = "";
   state.calendarError = "";
   state.checkin = "";
   state.checkout = "";

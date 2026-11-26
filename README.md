@@ -21,7 +21,7 @@ GitHub Pages.
 - Alternate website hostname: <https://www.mmt.lt>
 - Cloudflare Worker: <https://smolensko-calendar-api.vilnius-mmt.workers.dev>
 - The account-wide `workers.dev` subdomain is `vilnius-mmt`; URLs for other Workers in this account use it too.
-- API endpoints: `/api/calendar` and `/api/booking`.
+- API endpoints: `/api/calendar`, `/api/prices`, and `/api/booking`.
 - The Worker supports **Smolensko 35** and **Kavoliuko 14**, each with its own Booking.com and Airbnb iCal feeds.
 - Selecting a property tab loads only that property's availability and sends booking requests for that property.
 
@@ -33,6 +33,10 @@ explicitly approved for that change.
 ## Frontend behavior
 
 - The calendar merges unavailable nights from both feeds through `/api/calendar`.
+- Smolensko 35 also displays nightly Booking.com rates for three adults through
+  `/api/prices`. Rates cover the visible booking window (the current month plus
+  the next three months); dates with no available rate are left blank. Kavoliuko
+  14 has no configured rate source.
 - The property tabs switch between the Smolensko 35 and Kavoliuko 14 calendars;
   Kavoliuko uses warm yellow accents with warm-white available dates.
 - The page starts at the current month and allows navigation through the current month

@@ -11,6 +11,15 @@ const PROPERTIES = Object.freeze({
   })
 });
 
+const BOOKING_PRICE_SOURCE = Object.freeze({
+  hotelId: 17547944,
+  blockId: "1754794401_447018270_3_0_0",
+  pagename: "minutes-to-center",
+  destinationId: "-2620663"
+});
+const BOOKING_PRICE_QUERY_HASH = "5db8c67304471b7e3544df89121e647ba91a78f871ece6a60872965400d27df8";
+const BOOKING_PRICE_DAYS_PER_REQUEST = 61;
+
 const ALLOWED_ORIGINS = new Set([
   "https://antanas-sukevicius.github.io",
   "https://mmt.lt",
@@ -145,6 +154,111 @@ async function getUnavailableDates(env, propertyId) {
     fetchCalendar(airbnbUrl)
   ]);
   return [...new Set(calendars.flatMap((calendar) => [...calendar]))].sort();
+}
+
+function getPriceDateRange() {
+  const [year, month] = dateInVilnius().split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month + 3, 0));
+  return {
+    start,
+    end,
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10)
+  };
+}
+
+function parseBookingPrice(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^€[\s\u00a0]*([\d,]+(?:\.\d{1,2})?)$/);
+  if (!match) return null;
+
+  const price = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+async function getBookingPrices(propertyId) {
+  const source = propertyId === "smolensko-35" ? BOOKING_PRICE_SOURCE : null;
+  if (!source) return {};
+
+  const { start, end, startDate, endDate } = getPriceDateRange();
+  const prices = {};
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const chunkStart = cursor.toISOString().slice(0, 10);
+    const remainingDays = Math.floor((end - cursor) / 86400000) + 1;
+    const amountOfDays = Math.min(BOOKING_PRICE_DAYS_PER_REQUEST, remainingDays);
+    const nextDay = new Date(cursor);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    const url = new URL("https://www.booking.com/dml/graphql");
+    url.searchParams.set("dest_id", source.destinationId);
+    url.searchParams.set("dest_type", "city");
+    url.searchParams.set("group_adults", "3");
+    url.searchParams.set("no_rooms", "1");
+    url.searchParams.set("group_children", "0");
+    url.searchParams.set("all_sr_blocks", source.blockId);
+    url.searchParams.set("highlighted_blocks", source.blockId);
+    url.searchParams.set("matching_block_id", source.blockId);
+    url.searchParams.set("checkin", chunkStart);
+    url.searchParams.set("checkout", nextDay.toISOString().slice(0, 10));
+    url.searchParams.set("lang", "en-gb");
+    url.searchParams.set("selected_currency", "EUR");
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Origin: "https://www.booking.com",
+        Referer: "https://www.booking.com/"
+      },
+      body: JSON.stringify({
+        operationName: "AvailabilityCalendar",
+        variables: {
+          input: {
+            travelPurpose: 2,
+            pagenameDetails: { countryCode: "lt", pagename: source.pagename },
+            searchConfig: {
+              searchConfigDate: { startDate: chunkStart, amountOfDays },
+              nbAdults: 3,
+              nbRooms: 1,
+              nbChildren: 0,
+              childrenAges: []
+            }
+          }
+        },
+        extensions: {
+          persistedQuery: { version: 1, sha256Hash: BOOKING_PRICE_QUERY_HASH }
+        }
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw new Error(`Booking.com returned HTTP ${response.status}`);
+
+    const result = await response.json();
+    const calendar = result?.data?.availabilityCalendar;
+    if (calendar?.hotelId !== source.hotelId || !Array.isArray(calendar.days)) {
+      throw new Error("Booking.com returned invalid price data");
+    }
+
+    for (const day of calendar.days) {
+      if (day.available !== true ||
+          typeof day.checkin !== "string" ||
+          day.checkin < startDate ||
+          day.checkin > endDate) {
+        continue;
+      }
+
+      const price = parseBookingPrice(day.avgPriceFormatted);
+      if (price !== null) prices[day.checkin] = price;
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + amountOfDays);
+  }
+
+  return prices;
 }
 
 function cleanField(value, maxLength) {
@@ -306,7 +420,9 @@ export default {
     if (origin && !ALLOWED_ORIGINS.has(origin)) {
       return jsonResponse({ error: "Origin is not allowed" }, 403, null);
     }
-    if (url.pathname !== "/api/calendar" && url.pathname !== "/api/booking") {
+    if (url.pathname !== "/api/calendar" &&
+        url.pathname !== "/api/prices" &&
+        url.pathname !== "/api/booking") {
       return jsonResponse({ error: "Not found" }, 404, origin);
     }
     if (request.method === "OPTIONS") {
@@ -318,13 +434,29 @@ export default {
       }
       return submitBooking(request, env, origin);
     }
-    if (url.pathname !== "/api/calendar" || request.method !== "GET") {
+    if ((url.pathname === "/api/calendar" || url.pathname === "/api/prices") &&
+        request.method !== "GET") {
       return jsonResponse({ error: "Method not allowed" }, 405, origin);
     }
 
     const propertyId = url.searchParams.get("propertyId") || "smolensko-35";
     if (!Object.prototype.hasOwnProperty.call(PROPERTIES, propertyId)) {
       return jsonResponse({ error: "Unknown property" }, 400, origin);
+    }
+
+    if (url.pathname === "/api/prices") {
+      try {
+        const prices = await getBookingPrices(propertyId);
+        return jsonResponse({
+          propertyId,
+          pricingSupported: propertyId === "smolensko-35",
+          prices,
+          updatedAt: new Date().toISOString()
+        }, 200, origin);
+      } catch (error) {
+        console.error("Booking.com price request failed:", error.message);
+        return jsonResponse({ error: "Could not load Booking.com prices." }, 502, origin);
+      }
     }
 
     try {
