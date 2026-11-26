@@ -40,6 +40,7 @@ const elements = {
   checkoutSummary: document.getElementById("checkout-summary"),
   priceSummary: document.getElementById("price-summary"),
   priceTotal: document.getElementById("price-total"),
+  priceMeta: document.getElementById("price-meta"),
   priceDetails: document.getElementById("price-details"),
   checkinInput: document.getElementById("checkin-input"),
   checkoutInput: document.getElementById("checkout-input"),
@@ -151,14 +152,18 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function roundCurrency(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function getNightlyPrice(basePrice, guestCount) {
   if (!state.pricingConfig) return basePrice;
   const extraGuests = Math.max(0, guestCount - state.pricingConfig.baseGuests);
   const priceWithGuestFees =
     basePrice + extraGuests * state.pricingConfig.additionalGuestPerNightEUR;
-  return Math.round(
-    priceWithGuestFees * (1 - state.pricingConfig.discountPercent / 100) * 100
-  ) / 100;
+  return roundCurrency(
+    priceWithGuestFees * (1 - state.pricingConfig.discountPercent / 100)
+  );
 }
 
 function calculateStayPrice(checkin, checkout, guestCount) {
@@ -166,23 +171,50 @@ function calculateStayPrice(checkin, checkout, guestCount) {
 
   const cursor = parseDateKey(checkin);
   const end = parseDateKey(checkout);
-  let total = 0;
+  let baseTotal = 0;
+  let discountedNightlyTotal = 0;
   let nights = 0;
+  const extraGuests = Math.max(0, guestCount - state.pricingConfig.baseGuests);
   while (cursor < end) {
     const basePrice = state.prices[toDateKey(cursor)];
     if (!Number.isFinite(basePrice) || basePrice <= 0) return null;
-    total += getNightlyPrice(basePrice, guestCount);
+    baseTotal += basePrice;
+    discountedNightlyTotal += getNightlyPrice(basePrice, guestCount);
     nights += 1;
     cursor.setDate(cursor.getDate() + 1);
   }
 
+  const extraGuestTotal = roundCurrency(
+    extraGuests * state.pricingConfig.additionalGuestPerNightEUR * nights
+  );
+  const standardDiscountTotal = roundCurrency(
+    baseTotal + extraGuestTotal - discountedNightlyTotal
+  );
+  let weeklyDiscountTotal = 0;
+  let oneNightSurchargeTotal = 0;
   if (nights === 1) {
-    total *= 1 + state.pricingConfig.oneNightSurchargePercent / 100;
+    oneNightSurchargeTotal = roundCurrency(
+      discountedNightlyTotal * state.pricingConfig.oneNightSurchargePercent / 100
+    );
   } else if (nights >= state.pricingConfig.weeklyDiscountMinimumNights) {
-    total *= 1 - state.pricingConfig.weeklyDiscountPercent / 100;
+    weeklyDiscountTotal = roundCurrency(
+      discountedNightlyTotal * state.pricingConfig.weeklyDiscountPercent / 100
+    );
   }
 
-  return { nights, total: Math.round(total * 100) / 100 };
+  const total = roundCurrency(
+    discountedNightlyTotal - weeklyDiscountTotal + oneNightSurchargeTotal
+  );
+  return {
+    nights,
+    extraGuests,
+    baseTotal: roundCurrency(baseTotal),
+    extraGuestTotal,
+    standardDiscountTotal,
+    weeklyDiscountTotal,
+    oneNightSurchargeTotal,
+    total
+  };
 }
 
 function getBookingWindow() {
@@ -359,18 +391,26 @@ function renderCalendar() {
 }
 
 function renderPriceSummary() {
-  const hasStay = state.pricingSupported && state.checkin && state.checkout;
-  elements.priceSummary.hidden = !hasStay;
-  if (!hasStay) return;
+  elements.priceSummary.hidden = !state.pricingSupported;
+  if (!state.pricingSupported) return;
+
+  if (!state.checkin || !state.checkout) {
+    elements.priceTotal.textContent = "Select dates";
+    elements.priceMeta.textContent = "Choose check-in and check-out to see your estimate.";
+    elements.priceDetails.replaceChildren();
+    return;
+  }
 
   if (state.pricingLoading) {
     elements.priceTotal.textContent = "Loading…";
-    elements.priceDetails.textContent = "";
+    elements.priceMeta.textContent = "Fetching nightly rates.";
+    elements.priceDetails.replaceChildren();
     return;
   }
   if (state.pricingError || !state.pricingConfig) {
     elements.priceTotal.textContent = "Temporarily unavailable";
-    elements.priceDetails.textContent = "Booking.com rates could not be loaded.";
+    elements.priceMeta.textContent = "Booking.com rates could not be loaded.";
+    elements.priceDetails.replaceChildren();
     return;
   }
 
@@ -378,22 +418,59 @@ function renderPriceSummary() {
   const estimate = calculateStayPrice(state.checkin, state.checkout, guestCount);
   if (!estimate) {
     elements.priceTotal.textContent = "Price unavailable";
-    elements.priceDetails.textContent = "A rate is missing for one or more selected nights.";
+    elements.priceMeta.textContent = "A Booking.com rate is missing for one or more selected nights.";
+    elements.priceDetails.replaceChildren();
     return;
   }
 
   elements.priceTotal.textContent = formatCurrency(estimate.total);
-  const adjustments = [];
-  if (estimate.nights === 1 && state.pricingConfig.oneNightSurchargePercent > 0) {
-    adjustments.push(`${state.pricingConfig.oneNightSurchargePercent}% one-night surcharge`);
-  } else if (estimate.nights >= state.pricingConfig.weeklyDiscountMinimumNights &&
-      state.pricingConfig.weeklyDiscountPercent > 0) {
-    adjustments.push(`${state.pricingConfig.weeklyDiscountPercent}% weekly discount`);
-  }
-  elements.priceDetails.textContent =
+  elements.priceMeta.textContent =
     `${estimate.nights} night${estimate.nights === 1 ? "" : "s"} · ` +
-    `${guestCount} guest${guestCount === 1 ? "" : "s"}` +
-    (adjustments.length ? ` · ${adjustments.join(", ")}` : "");
+    `${guestCount} guest${guestCount === 1 ? "" : "s"}`;
+  const rows = [{
+    label: `Booking.com base rate (${state.pricingConfig.baseGuests} guest${state.pricingConfig.baseGuests === 1 ? "" : "s"})`,
+    amount: estimate.baseTotal
+  }];
+  if (estimate.extraGuestTotal > 0) {
+    rows.push({
+      label: `Extra guests (${estimate.extraGuests} × ${formatCurrency(state.pricingConfig.additionalGuestPerNightEUR)} × ${estimate.nights} night${estimate.nights === 1 ? "" : "s"})`,
+      amount: estimate.extraGuestTotal,
+      prefix: "+"
+    });
+  }
+  if (estimate.standardDiscountTotal > 0) {
+    rows.push({
+      label: `Standard discount (${state.pricingConfig.discountPercent}%)`,
+      amount: estimate.standardDiscountTotal,
+      prefix: "−"
+    });
+  }
+  if (estimate.weeklyDiscountTotal > 0) {
+    rows.push({
+      label: `Weekly discount (${state.pricingConfig.weeklyDiscountPercent}%)`,
+      amount: estimate.weeklyDiscountTotal,
+      prefix: "−"
+    });
+  }
+  if (estimate.oneNightSurchargeTotal > 0) {
+    rows.push({
+      label: `One-night surcharge (${state.pricingConfig.oneNightSurchargePercent}%)`,
+      amount: estimate.oneNightSurchargeTotal,
+      prefix: "+"
+    });
+  }
+
+  elements.priceDetails.replaceChildren();
+  for (const rowData of rows) {
+    const row = document.createElement("div");
+    row.className = "price-detail-row";
+    const label = document.createElement("span");
+    label.textContent = rowData.label;
+    const amount = document.createElement("span");
+    amount.textContent = `${rowData.prefix || ""}${formatCurrency(rowData.amount)}`;
+    row.append(label, amount);
+    elements.priceDetails.appendChild(row);
+  }
 }
 
 function selectDate(dateKey) {

@@ -91,7 +91,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .price-summary { grid-column: 1 / -1; }
 .date-summary small { display: block; margin-bottom: 4px; color: var(--muted); }
 .date-summary strong { font-size: .9rem; }
-.price-details { margin: 4px 0 0 !important; font-size: .76rem; }
+.price-meta { margin: 4px 0 0 !important; font-size: .76rem; }
+.price-details { display: grid; gap: 5px; margin-top: 8px; }
+.price-detail-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .78rem; }
+.price-detail-row span:last-child { color: var(--ink); font-weight: 650; white-space: nowrap; }
 .form-panel h3 { margin-bottom: 7px; }
 .form-panel > p { margin: 0 0 10px; color: var(--muted); font-size: .85rem; line-height: 1.45; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
