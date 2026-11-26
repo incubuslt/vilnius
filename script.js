@@ -350,7 +350,7 @@ function renderCalendar() {
       ? getNightlyPrice(basePrice, getGuestCount())
       : basePrice;
     const priceText = Number.isFinite(price) && price > 0
-      ? formatCurrency(price)
+      ? formatCurrency(price, 0)
       : "";
     const classes = ["day"];
     if (booked) classes.push("booked");
