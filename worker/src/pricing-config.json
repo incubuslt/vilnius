@@ -1,7 +1,7 @@
 {
   "baseGuests": 1,
   "additionalGuestPerNightEUR": 5,
-  "discountPercent": 0,
+  "discountPercent": 15,
   "weeklyDiscountPercent": 10,
   "weeklyDiscountMinimumNights": 6,
   "oneNightSurchargePercent": 20
