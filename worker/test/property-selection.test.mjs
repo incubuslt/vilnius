@@ -176,6 +176,116 @@ test("Kavoliuko booking notifications identify the selected apartment", async (t
   assert.ok(requestedUrls.every((url) => !url.includes("smolensko.ics")));
   assert.match(telegramMessage, /New booking request — Kavoliuko 14/);
   assert.match(telegramMessage, /Property: Kavoliuko 14/);
+  assert.doesNotMatch(telegramMessage, /Price estimate/);
+});
+
+test("Smolensko booking notifications include the itemized price estimate", async (t) => {
+  let telegramMessage = "";
+  await withMockedFetch(t, async (input, init) => {
+    const url = new URL(input);
+    if (url.hostname === "api.telegram.org") {
+      telegramMessage = JSON.parse(init.body).text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR");
+  });
+
+  const roundCurrency = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const baseTotal = 100;
+  const directBookingDiscountTotal = roundCurrency(
+    baseTotal * pricingConfig.discountPercent / 100
+  );
+  const discountedTotal = baseTotal - directBookingDiscountTotal;
+  const oneNightSurchargeTotal = roundCurrency(
+    discountedTotal * pricingConfig.oneNightSurchargePercent / 100
+  );
+  const total = roundCurrency(discountedTotal + oneNightSurchargeTotal);
+  const booking = {
+    propertyId: "smolensko-35",
+    name: "Test Guest",
+    email: "guest@example.com",
+    phone: "+37060000000",
+    checkin: "2099-01-01",
+    checkout: "2099-01-02",
+    adults: 1,
+    children: 0,
+    message: "",
+    priceEstimate: {
+      nights: 1,
+      guests: 1,
+      baseTotal,
+      extraGuestTotal: 0,
+      directBookingDiscountTotal,
+      weeklyDiscountTotal: 0,
+      oneNightSurchargeTotal,
+      total
+    }
+  };
+  const response = await worker.fetch(
+    makeRequest("/api/booking", { method: "POST", body: booking }),
+    makeEnv()
+  );
+
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.match(telegramMessage, /\n\nPrice estimate \(1 night · 1 guest\):/);
+  assert.match(telegramMessage, /Booking\.com base rate \(1 guest\): €100/);
+  if (directBookingDiscountTotal > 0) {
+    assert.match(
+      telegramMessage,
+      new RegExp(`Direct booking discount \\(${pricingConfig.discountPercent}%\\): −`)
+    );
+  }
+  if (oneNightSurchargeTotal > 0) {
+    assert.match(
+      telegramMessage,
+      new RegExp(`One-night surcharge \\(${pricingConfig.oneNightSurchargePercent}%\\): \\+`)
+    );
+  }
+  assert.ok(telegramMessage.endsWith(
+    `Estimated stay total: ${new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 0
+    }).format(total)}`
+  ));
+});
+
+test("booking rejects inconsistent price estimates before fetching calendars", async (t) => {
+  let fetchCount = 0;
+  await withMockedFetch(t, async () => {
+    fetchCount += 1;
+    throw new Error("Unexpected external request");
+  });
+
+  const response = await worker.fetch(
+    makeRequest("/api/booking", {
+      method: "POST",
+      body: {
+        propertyId: "smolensko-35",
+        name: "Test Guest",
+        email: "guest@example.com",
+        phone: "+37060000000",
+        checkin: "2099-01-01",
+        checkout: "2099-01-02",
+        adults: 1,
+        children: 0,
+        priceEstimate: {
+          nights: 1,
+          guests: 1,
+          baseTotal: 100,
+          extraGuestTotal: 0,
+          directBookingDiscountTotal: 0,
+          weeklyDiscountTotal: 0,
+          oneNightSurchargeTotal: 0,
+          total: 99
+        }
+      }
+    }),
+    makeEnv()
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(fetchCount, 0);
 });
 
 test("unknown property IDs are rejected without fetching feeds", async (t) => {

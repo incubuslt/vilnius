@@ -48,6 +48,7 @@ const elements = {
   childCount: document.getElementById("child-count"),
   message: document.getElementById("guest-message"),
   messageCharacterCount: document.getElementById("message-character-count"),
+  submitButtonPrice: document.getElementById("booking-submit-price"),
   form: document.getElementById("booking-form"),
   feedback: document.getElementById("form-feedback")
 };
@@ -392,6 +393,7 @@ function renderCalendar() {
 }
 
 function renderPriceSummary() {
+  elements.submitButtonPrice.textContent = "";
   elements.priceSummary.hidden = !state.pricingSupported;
   if (!state.pricingSupported) return;
 
@@ -425,6 +427,7 @@ function renderPriceSummary() {
   }
 
   elements.priceTotal.textContent = formatCurrency(estimate.total, 0);
+  elements.submitButtonPrice.textContent = ` · ${formatCurrency(estimate.total, 0)}`;
   elements.priceMeta.textContent =
     `${estimate.nights} night${estimate.nights === 1 ? "" : "s"} · ` +
     `${guestCount} guest${guestCount === 1 ? "" : "s"}`;
@@ -603,6 +606,17 @@ async function submitBooking(event) {
     return;
   }
 
+  const estimate = calculateStayPrice(checkin, checkout, adults + children);
+  const priceEstimate = estimate ? {
+    nights: estimate.nights,
+    guests: adults + children,
+    baseTotal: estimate.baseTotal,
+    extraGuestTotal: estimate.extraGuestTotal,
+    directBookingDiscountTotal: estimate.standardDiscountTotal,
+    weeklyDiscountTotal: estimate.weeklyDiscountTotal,
+    oneNightSurchargeTotal: estimate.oneNightSurchargeTotal,
+    total: estimate.total
+  } : null;
   const submitButton = elements.form.querySelector('[type="submit"]');
   submitButton.disabled = true;
   elements.propertyTabs.forEach((tab) => {
@@ -617,7 +631,8 @@ async function submitBooking(event) {
       body: JSON.stringify({
         ...Object.fromEntries(formData.entries()),
         propertyId,
-        guests: adults + children
+        guests: adults + children,
+        priceEstimate
       })
     });
     const result = await response.json();

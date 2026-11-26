@@ -286,6 +286,78 @@ function cleanField(value, maxLength) {
   return value.trim().replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, maxLength);
 }
 
+function validatePriceEstimate(estimate, nights, guests) {
+  if (!estimate || typeof estimate !== "object" || Array.isArray(estimate) ||
+      estimate.nights !== nights || estimate.guests !== guests) {
+    return false;
+  }
+
+  const amounts = [
+    estimate.baseTotal,
+    estimate.extraGuestTotal,
+    estimate.directBookingDiscountTotal,
+    estimate.weeklyDiscountTotal,
+    estimate.oneNightSurchargeTotal,
+    estimate.total
+  ];
+  if (!amounts.every((amount) =>
+    Number.isFinite(amount) && amount >= 0 && amount <= 1_000_000
+  )) {
+    return false;
+  }
+
+  const expectedTotal = Math.round((
+    estimate.baseTotal +
+    estimate.extraGuestTotal -
+    estimate.directBookingDiscountTotal -
+    estimate.weeklyDiscountTotal +
+    estimate.oneNightSurchargeTotal +
+    Number.EPSILON
+  ) * 100) / 100;
+  return Math.abs(estimate.total - expectedTotal) < 0.011;
+}
+
+function formatEstimateCurrency(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function formatPriceEstimateLines(estimate) {
+  const extraGuests = Math.max(0, estimate.guests - pricingConfig.baseGuests);
+  const lines = [
+    `Price estimate (${estimate.nights} night${estimate.nights === 1 ? "" : "s"} · ${estimate.guests} guest${estimate.guests === 1 ? "" : "s"}):`,
+    `Booking.com base rate (${pricingConfig.baseGuests} guest${pricingConfig.baseGuests === 1 ? "" : "s"}): ${formatEstimateCurrency(estimate.baseTotal)}`
+  ];
+
+  if (estimate.extraGuestTotal > 0) {
+    lines.push(
+      `Extra guests (${extraGuests} × ${formatEstimateCurrency(pricingConfig.additionalGuestPerNightEUR)} × ${estimate.nights} night${estimate.nights === 1 ? "" : "s"}): +${formatEstimateCurrency(estimate.extraGuestTotal)}`
+    );
+  }
+  if (estimate.directBookingDiscountTotal > 0) {
+    lines.push(
+      `Direct booking discount (${pricingConfig.discountPercent}%): −${formatEstimateCurrency(estimate.directBookingDiscountTotal)}`
+    );
+  }
+  if (estimate.weeklyDiscountTotal > 0) {
+    lines.push(
+      `Weekly discount (${pricingConfig.weeklyDiscountPercent}%): −${formatEstimateCurrency(estimate.weeklyDiscountTotal)}`
+    );
+  }
+  if (estimate.oneNightSurchargeTotal > 0) {
+    lines.push(
+      `One-night surcharge (${pricingConfig.oneNightSurchargePercent}%): +${formatEstimateCurrency(estimate.oneNightSurchargeTotal)}`
+    );
+  }
+
+  lines.push(`Estimated stay total: ${formatEstimateCurrency(estimate.total)}`);
+  return lines;
+}
+
 function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
@@ -383,6 +455,18 @@ async function submitBooking(request, env, origin) {
     return bookingResponse({ error: "Check-in date must not be in the past." }, 400, origin);
   }
 
+  const nights = (Date.parse(`${checkout}T00:00:00Z`) -
+    Date.parse(`${checkin}T00:00:00Z`)) / 86400000;
+  const hasPriceEstimate = booking.priceEstimate !== undefined &&
+    booking.priceEstimate !== null;
+  const priceEstimate = hasPriceEstimate ? booking.priceEstimate : null;
+  if (hasPriceEstimate && (
+    propertyId !== PRICING_SUPPORTED_PROPERTY ||
+    !validatePriceEstimate(priceEstimate, nights, adults + children)
+  )) {
+    return bookingResponse({ error: "The price estimate is invalid. Please refresh the page and try again." }, 400, origin);
+  }
+
   let unavailableDates;
   try {
     unavailableDates = new Set(await getUnavailableDates(env, propertyId));
@@ -410,7 +494,8 @@ async function submitBooking(request, env, origin) {
     `Adults: ${adults}`,
     `Children: ${children}`,
     `Total guests: ${adults + children}`,
-    `Message: ${message || "(none)"}`
+    `Message: ${message || "(none)"}`,
+    ...(priceEstimate ? ["", ...formatPriceEstimateLines(priceEstimate)] : [])
   ].join("\n");
 
   try {

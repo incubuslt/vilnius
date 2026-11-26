@@ -110,9 +110,12 @@ defaults to zero.
 The Worker validates guest details, dates, a maximum of four guests total, and
 the 300-character optional-message limit. It re-fetches both iCal feeds before
 accepting the request, then sends a Telegram message identifying the selected
-property and containing adult, child, and total guest counts. A successful
-response means a request notification was delivered; it is not an approval or
-booking confirmation.
+property and containing adult, child, and total guest counts. For Smolensko,
+the frontend also sends an optional price estimate; the Worker validates its
+stay length, guest count, and arithmetic, then appends the itemized estimate
+rounded to whole euros. The website displays the same total on the request
+button. A successful response means a request notification was delivered; it
+is not an approval or booking confirmation.
 
 Booking requests are limited to three per IP per minute using the
 `BOOKING_RATE_LIMITER` binding in `wrangler.toml`. A hidden honeypot field is
