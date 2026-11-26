@@ -144,12 +144,12 @@ function getGuestCount() {
   return adults + Number(elements.childCount.value || 0);
 }
 
-function formatCurrency(value) {
+function formatCurrency(value, maximumFractionDigits = 2) {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "EUR",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2
+    maximumFractionDigits
   }).format(value);
 }
 
@@ -424,7 +424,7 @@ function renderPriceSummary() {
     return;
   }
 
-  elements.priceTotal.textContent = formatCurrency(estimate.total);
+  elements.priceTotal.textContent = formatCurrency(estimate.total, 0);
   elements.priceMeta.textContent =
     `${estimate.nights} night${estimate.nights === 1 ? "" : "s"} · ` +
     `${guestCount} guest${guestCount === 1 ? "" : "s"}`;
@@ -441,7 +441,7 @@ function renderPriceSummary() {
   }
   if (estimate.standardDiscountTotal > 0) {
     rows.push({
-      label: `Standard discount (${state.pricingConfig.discountPercent}%)`,
+      label: `Direct booking discount (${state.pricingConfig.discountPercent}%)`,
       amount: estimate.standardDiscountTotal,
       prefix: "−"
     });
@@ -468,7 +468,7 @@ function renderPriceSummary() {
     const label = document.createElement("span");
     label.textContent = rowData.label;
     const amount = document.createElement("span");
-    amount.textContent = `${rowData.prefix || ""}${formatCurrency(rowData.amount)}`;
+    amount.textContent = `${rowData.prefix || ""}${formatCurrency(rowData.amount, 0)}`;
     row.append(label, amount);
     elements.priceDetails.appendChild(row);
   }
